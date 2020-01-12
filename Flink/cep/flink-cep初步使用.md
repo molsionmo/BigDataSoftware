@@ -8,69 +8,74 @@
 
 ## 二、Flink CEP
 
-Flink作为目前大数据领域实时计算的主流计算框架，天然支持低延迟、高吞吐等特性，再加上Flink中的窗口模型和状态模型，更是对CEP提供了非常强大的支撑。Flink中专门实现了复杂事件处理的库——Flink CEP，用来方便的进行在事件流中检测事件模式。Flink CEP重度参考了论文 [《Efficient Pattern Matching over Event Streams》](https://github.com/molsionmo/EventStreamsPatternMatchingPaper-zh_cn)
+Flink作为目前大数据领域实时计算的主流计算框架，天然支持低延迟、高吞吐等特性，再加上Flink中的窗口模型和状态模型，更是对CEP提供了非常强大的支撑。Flink中专门实现了复杂事件处理的库——Flink CEP，用来方便的进行在事件流中检测事件模式。
 
 以下是一个简单的例子，说明在Flink中如何实现CEP：
 
 ```java
-public class CEPMain2 {
+/**
+ * 官方样例
+ */
+@Slf4j
+public class CEPExample {
     public static void main(String[] args) throws Exception {
-        StreamExecutionEnvironment env
-                = StreamExecutionEnvironment.getExecutionEnvironment();
-        DataStream<Tuple3<Integer, String, String>> eventStream = env.fromElements(
-                Tuple3.of(1500, "login", "fail"),
-                Tuple3.of(982, "login", "fail"),
-                Tuple3.of(1500, "login", "fail"),
-                Tuple3.of(1320, "login", "success"),
-                Tuple3.of(1500, "login", "fail"),
-                Tuple3.of(982, "login", "fail"),
-                Tuple3.of(1450, "exit", "success"),
-                Tuple3.of(982, "login", "fail"),
-                Tuple3.of(982, "login", "success"));
-        //AfterMatchSkipStrategy skipStrategy = AfterMatchSkipStrategy.skipPastLastEvent();
-        Pattern<Tuple3<Integer, String, String>, ?> loginFail =
-                Pattern.<Tuple3<Integer, String, String>>begin("begin")
-                        .where(new SimpleCondition<Tuple3<Integer, String, String>>() {
-                            @Override
-                            public boolean filter(Tuple3<Integer, String, String> s) throws Exception {
-                                return s.f2.equalsIgnoreCase("fail");
-                            }
-                        }).times(3).within(Time.seconds(5))
-                .followedBy("loginSuccess").where(new SimpleCondition<Tuple3<Integer, String, String>>() {
-                    @Override
-                    public boolean filter(Tuple3<Integer, String, String> tuple3) throws Exception {
-                        return tuple3.f1.equals("login") && tuple3.f2.equals("success");
-                    }
-                }).within(Time.seconds(5));
-        PatternStream<Tuple3<Integer, String, String>> patternStream =
-                CEP.pattern(eventStream.keyBy(x -> x.f0), loginFail);
-        DataStream<String> alarmStream =
-                patternStream.select(new PatternSelectFunction<Tuple3<Integer, String, String>, String>() {
-                    @Override
-                    public String select(Map<String, List<Tuple3<Integer, String, String>>> map) throws Exception {
-                        log.info("p: {}", map);
-                        String msg = String.format("ID %d has login failed 3 times in 5 seconds,but login success once in next 5 seconds."
-                                , map.values().iterator().next().get(0).f0);
-                        return msg;
-                    }
-                });
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        DataStream<Event> input = env.fromElements(
+                new Event(10, "name10"),
+                new Event(42, "name42"),
+                new SubEvent(43, "subEventName43",11),
+                new Event(44, "end"),
+                new Event(45, "end")
+                );
 
-        alarmStream.print();
+        Pattern<Event, ?> pattern = Pattern.<Event>begin("start").where(new SimpleCondition<Event>() {
+            @Override
+            public boolean filter(Event event) throws Exception {
+                log.info("start:{}", event);
+                return event.getId() == 42;
+            }
+        }).next("middle").subtype(SubEvent.class).where(new SimpleCondition<SubEvent>() {
+            @Override
+            public boolean filter(SubEvent subEvent) throws Exception {
+                log.info("middle:{}", subEvent);
+                return subEvent.getVolume() >= 10;
+            }
+        }).followedBy("end").where(new SimpleCondition<Event>() {
+            @Override
+            public boolean filter(Event event) throws Exception {
+                log.info("end:{}", event);
+                return event.getName().equals("end");
+            }
+        });
 
-        env.execute("cep event test");
+        PatternStream<Event> patternStream = CEP.pattern(input, pattern);
+        DataStream<String> select = patternStream.select(new PatternSelectFunction<Event, String>() {
+            @Override
+            public String select(Map<String, List<Event>> pattern) throws Exception {
+                log.info("select result : {}", pattern);
+                return pattern.toString();
+            }
+        });
+
+        select.print();
+        env.execute("flink cep official example");
     }
 }
 ```
 
 运行结果如下：
-![20191228165253.png](https://i.loli.net/2019/12/28/RPBXLxqUKr2l563.png)
+![20200103165320.png](https://i.loli.net/2020/01/03/RdIDUlLEiPw8XQA.png)
 
-可见成功捕获了ID为982的用户,5s内登录失败了3次,但接下来5s又成功登录了一次.
+```java
+/**
+* 成功捕获了 {start=[Event(id=42, name=name42)], middle=[SubEvent(volume=11)], end=[Event(id=44, name=end)]}
+*/
+```
 
 在Flink中实现一个CEP可以总结为四步：
 
 * 一，构建需要的数据流
-* 二，构造正确的模式，
+* 二，构造正确的模式
 * 三，将数据流和模式进行结合
 * 四，在模式流中获取匹配到的数据
 

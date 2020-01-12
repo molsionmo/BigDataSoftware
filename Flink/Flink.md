@@ -12,3 +12,10 @@
 ## FLink CEP
 
 Flink CEP参考的是[Efficient Pattern Matching over Event Streams](https://people.cs.umass.edu/~yanlei/publications/sase-sigmod08.pdf)中的NFA模型,在这篇论文中，提到了NFA，也就是Non-determined Finite Automaton，叫做不确定的有限状态机，指的是状态有限，但是每个状态可能被转换成多个状态(不确定).需要理解清楚这个NFA的整体过程才能理解整个CEP的设计.
+
+## 论文相关
+
+1. [Streaming 101: 批处理之上的世界（一）](https://zhuanlan.zhihu.com/p/59798824)
+2. [Streaming 102: 批处理之上的世界（二）（上）](https://zhuanlan.zhihu.com/p/59993580)
+3. [Streaming 102: 批处理之上的世界（二）（下）](https://zhuanlan.zhihu.com/p/60236077)
+4. [《基于事件流的高效模式匹配》(简易版翻译)](https://www.jianshu.com/p/e162e9cc73f7)
